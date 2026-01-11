@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Activity Recommender</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>Activity Tracker</h1>
+            <div class="status">
+                <span class="status-label">Status:</span>
+                <span id="statusIndicator" class="status-badge">Loading...</span>
+            </div>
+        </header>
+
+        <!-- Toggle Tracking -->
+        <div class="control-section">
+            <label class="toggle-container">
+                <span>Enable Tracking</span>
+                <input type="checkbox" id="trackingToggle" checked>
+                <span class="toggle-slider"></span>
+            </label>
+        </div>
+
+        <!-- Statistics -->
+        <section class="stats-section">
+            <h2>Today's Activity</h2>
+
+            <div class="stat-grid">
+                <div class="stat-card">
+                    <div class="stat-value" id="sitesVisited">-</div>
+                    <div class="stat-label">Sites Visited</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-value" id="timeTracked">-</div>
+                    <div class="stat-label">Time Tracked</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-value" id="searchQueries">-</div>
+                    <div class="stat-label">Searches</div>
+                </div>
+
+                <div class="stat-card">
+                    <div class="stat-value" id="appsUsed">-</div>
+                    <div class="stat-label">Apps Used</div>
+                </div>
+            </div>
+
+            <!-- Top Sites -->
+            <div class="top-sites">
+                <h3>Top Sites</h3>
+                <div id="topSitesList" class="sites-list">
+                    <p class="loading">Loading...</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Actions -->
+        <section class="actions-section">
+            <button id="exportBtn" class="action-btn">Export Data</button>
+            <button id="clearBtn" class="action-btn danger">Clear Data</button>
+        </section>
+
+        <!-- Footer -->
+        <footer>
+            <p class="privacy-note">All data is stored locally on your device</p>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

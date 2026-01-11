@@ -1,0 +1,22 @@
+{
+  "name": "ai-activity-recommender",
+  "version": "1.0.0",
+  "description": "Comprehensive activity tracking system for browsing and application usage on macOS",
+  "main": "index.js",
+  "scripts": {
+    "setup": "./scripts/setup.sh",
+    "install-host": "cd native-host && ./install.sh",
+    "query": "source venv/bin/activate && python3 analytics/query-tools.py",
+    "export": "source venv/bin/activate && python3 analytics/export.py"
+  },
+  "keywords": [
+    "activity-tracking",
+    "chrome-extension",
+    "browsing-history",
+    "analytics",
+    "macos",
+    "native-messaging"
+  ],
+  "author": "Your Name",
+  "license": "MIT"
+}
