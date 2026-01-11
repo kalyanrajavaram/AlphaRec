@@ -13,6 +13,13 @@ from collections import defaultdict
 from datetime import datetime, timedelta
 from pathlib import Path
 
+# Load .env file automatically
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, will use environment variables
+
 from openai import OpenAI
 
 # PDF generation
@@ -718,11 +725,14 @@ def main():
     print("AI TOOL RECOMMENDATIONS PDF GENERATOR")
     print("=" * 60)
 
-    # Check for API key
+    # Check for API key (loaded from .env or environment)
     api_key = os.environ.get("OPENAI_API_KEY")
     if not api_key:
-        print("\nError: OPENAI_API_KEY environment variable not set.")
-        print("Please set it with: export OPENAI_API_KEY='your-key-here'")
+        print("\nError: OPENAI_API_KEY not found.")
+        print("\nTo fix this, create a .env file in the project directory:")
+        print("  echo 'OPENAI_API_KEY=your-key-here' > .env")
+        print("\nOr set it as an environment variable:")
+        print("  export OPENAI_API_KEY='your-key-here'")
         return 1
 
     client = OpenAI(api_key=api_key)
