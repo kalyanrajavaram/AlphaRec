@@ -1,0 +1,87 @@
+# AlphaRec Configuration
+# All settings in one place - no more hardcoded values
+
+# Data sources
+data:
+  exports_dir: "exports/raw_export_20260110_214327"
+  tools_file: "ai_tools_cleaned.json"
+
+# Embedding model settings
+embeddings:
+  model_name: "all-MiniLM-L6-v2"  # Fast, good quality, 384 dimensions
+  # Alternatives:
+  # - "all-mpnet-base-v2" (better quality, slower, 768 dim)
+  # - "multi-qa-MiniLM-L6-cos-v1" (optimized for semantic search)
+  cache_embeddings: true
+  cache_dir: ".embedding_cache"
+
+# User profile settings
+user_profile:
+  # What signals to embed
+  include_searches: true
+  include_page_titles: true
+  include_urls: false  # URLs are noisy, titles are better
+  include_app_names: true
+
+  # Weighting for different signal types
+  weights:
+    searches: 2.0      # Searches are high-intent signals
+    page_titles: 1.0
+    app_names: 0.5     # Apps are context, not intent
+
+# Tool matching settings
+matching:
+  top_k: 50                    # Number of tools to consider
+  similarity_threshold: 0.3   # Minimum similarity to recommend
+  exclude_already_used: true  # Don't recommend tools user already uses
+
+# Task detection settings (detect user's current task from behavior)
+task_detection:
+  enabled: true
+
+  # App sequence pattern detection
+  patterns:
+    min_occurrences: 3           # Minimum times pattern must occur
+    max_ngram_size: 4            # Max apps in a sequence pattern (2, 3, 4)
+    max_gap_seconds: 60          # Max gap between apps in pattern
+
+  # Signal weighting for task inference
+  signal_weights:
+    app_duration: 0.40           # Weight for app usage time
+    page_context: 0.35           # Weight for browsing context
+    patterns: 0.15               # Weight for detected patterns
+    window_titles: 0.10          # Weight for window title hints
+
+  # Task-aware tool matching
+  task_matching:
+    min_task_fit: 3              # Minimum task_fit score to recommend
+    task_boost_weight: 0.2       # How much task affects final score
+
+# Sequence analysis settings (the core of pain point detection)
+# Sequences are chains of related actions that reveal intent
+sequences:
+  sequence_gap_seconds: 300       # 5 min gap = new sequence
+  quick_bounce_seconds: 15        # Visit < 15s = bounce (didn't find what they needed)
+  engaged_threshold_seconds: 60   # Visit > 60s = engaged with content
+  deep_engagement_seconds: 180    # Visit > 3min = deep engagement (likely found answer)
+  topic_similarity_threshold: 0.4 # How similar topics need to be to group into sequence
+  resolution_gap_seconds: 600     # 10 min no activity on topic = resolved
+
+# Clustering settings
+clustering:
+  algorithm: "hdbscan"  # or "kmeans"
+  min_cluster_size: 3
+  min_samples: 2
+
+# LLM settings (for final recommendation explanation)
+llm:
+  provider: "openai"
+  model: "gpt-4o"
+  temperature: 0.7
+  max_tokens: 2000
+
+# Output settings
+output:
+  generate_pdf: true
+  pdf_output_dir: "output"
+  save_intermediate: false  # Save embeddings/profiles for debugging

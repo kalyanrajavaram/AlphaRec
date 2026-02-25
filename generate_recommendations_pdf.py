@@ -23,6 +23,13 @@ except ImportError:
 from openai import OpenAI
 
 # PDF generation
+from semantic_analysis import generate_semantic_profile
+from smart_matching import (
+    calculate_tool_relevance_scores,
+    create_smart_tools_summary,
+    filter_already_used_tools,
+    get_contextual_prompt_additions
+)
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -162,7 +169,7 @@ def load_ai_tools():
     return data["tools"]
 
 
-def create_user_profile_summary(insights):
+def create_user_profile_summary(insights, semantic_profile=None):
     """Create a concise summary of user behavior for the LLM."""
     # Get top 10 domains by time spent
     sorted_domains = sorted(insights["top_domains"].items(), key=lambda x: x[1], reverse=True)[:10]
@@ -198,6 +205,58 @@ USER BEHAVIOR PROFILE:
 - Moderate interactions: {insights["keyboard_intensity"]["moderate"]}
 - Heavy interactions: {insights["keyboard_intensity"]["heavy"]}
 """
+
+    # Add semantic insights if available
+    if semantic_profile:
+        sem = semantic_profile.get("summary", {})
+        frustration = semantic_profile.get("frustration_analysis", {})
+        tasks = semantic_profile.get("task_classification", {})
+        search_themes = semantic_profile.get("search_themes", {})
+        time_patterns = semantic_profile.get("time_patterns", {})
+
+        summary += f"""
+## SEMANTIC INSIGHTS (Key Behavioral Patterns):
+
+### Frustration Score: {sem.get('frustration_score', 0)}/100
+"""
+        # Add pain points
+        pain_points = frustration.get("pain_points", [])
+        if pain_points:
+            summary += "### Detected Pain Points:\n"
+            for pp in pain_points[:5]:
+                summary += f"- {pp}\n"
+
+        # Add repeated search patterns (indicates user struggling)
+        repeated = frustration.get("repeated_searches", [])
+        if repeated:
+            summary += "\n### Repeated Search Patterns (user struggling to find answers):\n"
+            for r in repeated[:3]:
+                summary += f"- Searched '{r['topic']}' {r['count']} times with variations\n"
+
+        # Add task classification
+        summary += f"\n### Primary Work Type: {sem.get('dominant_task', 'unknown').upper()}\n"
+        breakdown = tasks.get("breakdown", {})
+        top_tasks = sorted(breakdown.items(), key=lambda x: x[1].get("percentage", 0), reverse=True)[:3]
+        for task, data in top_tasks:
+            if data.get("percentage", 0) > 5:
+                summary += f"- {task.title()}: {data['percentage']}% of time\n"
+
+        # Add search themes (more useful than raw queries)
+        themes = search_themes.get("themes", [])
+        if themes:
+            summary += "\n### Search Intent Themes:\n"
+            for theme in themes[:4]:
+                summary += f"- {theme['theme']}: {theme['count']} searches - {theme['indicates']}\n"
+
+        # Add work style
+        summary += f"\n### Work Style: {time_patterns.get('work_style', 'unknown').replace('_', ' ').title()}\n"
+        summary += f"### Peak Productivity: {time_patterns.get('peak_period', 'Unknown')}\n"
+
+        # Quick bounces indicate content not meeting needs
+        bounces = frustration.get("quick_bounces", [])
+        if len(bounces) > 5:
+            summary += f"\n### Content Satisfaction: LOW ({len(bounces)} quick page exits detected)\n"
+
     return summary
 
 
@@ -221,28 +280,34 @@ def create_tools_summary(tools, limit=100):
     return json.dumps(tools_list, indent=2)
 
 
-def get_structured_recommendations(user_profile: str, tools_summary: str, client: OpenAI):
+def get_structured_recommendations(user_profile: str, tools_summary: str, client: OpenAI, contextual_additions: str = ""):
     """Get AI recommendations in structured JSON format."""
 
     system_prompt = """You are an AI tool recommendation expert. Based on the user's browsing behavior,
-search queries, and application usage patterns, recommend the most relevant AI tools.
+search queries, application usage patterns, and SEMANTIC INSIGHTS, recommend the most relevant AI tools.
 
 IMPORTANT: You MUST respond with valid JSON only. No markdown, no explanation, just JSON.
+
+PAY SPECIAL ATTENTION TO:
+1. The FRUSTRATION SCORE and PAIN POINTS - these are real problems to solve
+2. The PRIMARY WORK TYPE - recommendations should match their workflow
+3. The SEARCH INTENT THEMES - these reveal what they're trying to accomplish
+4. Tools marked with high relevance scores in the list
 
 Return exactly this JSON structure:
 {
   "recommendations": [
     {
       "tool_name": "exact tool name from the list",
-      "reason": "2-3 sentences explaining why based on their specific behavior",
-      "friction_point": "specific pain point this tool addresses",
-      "use_case": "concrete example from their workflow",
+      "reason": "2-3 sentences explaining why based on their specific behavior and pain points",
+      "friction_point": "specific pain point this tool addresses (reference detected pain points)",
+      "use_case": "concrete example from their workflow based on their task classification",
       "priority": 1
     }
   ],
   "speedups": [
     {
-      "description": "specific workflow improvement",
+      "description": "specific workflow improvement tied to detected pain points",
       "time_saved": "estimated time savings (e.g., '2-3 hours/week')"
     }
   ],
@@ -255,17 +320,22 @@ Return exactly this JSON structure:
   ]
 }
 
-Provide exactly 5 recommendations, 3-4 speedups, and 3-5 roadmap steps.
+Provide exactly 5-7 recommendations, 3-4 speedups, and 3-5 roadmap steps.
 Focus on tools they are NOT already using heavily.
-Reference specific behaviors from their data."""
+Prioritize tools that solve the detected PAIN POINTS and match their PRIMARY WORK TYPE.
+Reference specific behaviors and frustration signals from their data."""
+
+    # Add contextual guidance if provided
+    if contextual_additions:
+        system_prompt += f"\n\nADDITIONAL CONTEXT:\n{contextual_additions}"
 
     user_prompt = f"""
 {user_profile}
 
-## Available AI Tools:
+## Available AI Tools (pre-sorted by relevance):
 {tools_summary}
 
-Generate personalized recommendations based on this user's behavior patterns.
+Generate personalized recommendations based on this user's behavior patterns and semantic insights.
 Return ONLY valid JSON, no other text."""
 
     response = client.chat.completions.create(
@@ -738,23 +808,49 @@ def main():
     client = OpenAI(api_key=api_key)
 
     try:
-        print("\n[1/5] Loading user behavior data...")
+        print("\n[1/6] Loading user behavior data...")
         user_data = load_user_data()
         print(f"  - Browsing history: {len(user_data['browsing_history'])} entries")
         print(f"  - Search queries: {len(user_data['search_queries'])} entries")
         print(f"  - App usage: {len(user_data['application_usage'])} entries")
 
-        print("\n[2/5] Analyzing user behavior patterns...")
+        print("\n[2/6] Analyzing user behavior patterns...")
         insights = analyze_user_behavior(user_data)
-        user_profile = create_user_profile_summary(insights)
 
-        print("\n[3/5] Loading AI tools database...")
+        print("\n[3/6] Running semantic analysis (frustration, tasks, patterns)...")
+        semantic_profile = generate_semantic_profile(user_data)
+        sem_summary = semantic_profile.get("summary", {})
+        print(f"  - Frustration score: {sem_summary.get('frustration_score', 0)}/100")
+        print(f"  - Dominant task type: {sem_summary.get('dominant_task', 'unknown')}")
+        print(f"  - Work style: {sem_summary.get('work_style', 'unknown')}")
+        print(f"  - Pain points detected: {len(sem_summary.get('key_pain_points', []))}")
+
+        user_profile = create_user_profile_summary(insights, semantic_profile)
+
+        print("\n[4/6] Loading AI tools database...")
         tools = load_ai_tools()
         print(f"  - Loaded {len(tools)} AI tools")
-        tools_summary = create_tools_summary(tools, limit=args.tools_limit)
 
-        print("\n[4/5] Generating personalized recommendations with GPT-4o...")
-        recommendations_data = get_structured_recommendations(user_profile, tools_summary, client)
+        # Smart matching: pre-score and filter tools
+        print("  - Running smart matching algorithm...")
+        filtered_tools = filter_already_used_tools(tools, semantic_profile, user_data)
+        scored_tools = calculate_tool_relevance_scores(
+            filtered_tools,
+            semantic_profile,
+            max_tools=args.tools_limit
+        )
+        print(f"  - Top tool scores: {', '.join([f'{t['name']}({t['score']})' for t in scored_tools[:5]])}")
+
+        # Use smart tools summary instead of basic summary
+        tools_summary = create_smart_tools_summary(scored_tools, include_scores=True)
+
+        # Get contextual prompt additions
+        contextual_additions = get_contextual_prompt_additions(semantic_profile)
+
+        print("\n[5/6] Generating personalized recommendations with GPT-4o...")
+        recommendations_data = get_structured_recommendations(
+            user_profile, tools_summary, client, contextual_additions
+        )
 
         # Enrich recommendations with tool metadata
         enriched_recs = enrich_recommendations(
@@ -764,7 +860,7 @@ def main():
         print(f"  - Generated {len(enriched_recs)} recommendations")
         print(f"  - Generated {len(recommendations_data.get('speedups', []))} speedup suggestions")
 
-        print("\n[5/5] Generating PDF report...")
+        print("\n[6/6] Generating PDF report...")
         generator = RecommendationsPDFGenerator(output_path=args.output)
         output_file = generator.generate(insights, recommendations_data, enriched_recs)
 

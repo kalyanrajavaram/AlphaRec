@@ -1,0 +1,17 @@
+# AlphaRec v2 Dependencies
+
+# Core - Embeddings
+sentence-transformers>=2.2.0
+numpy>=1.21.0
+
+# Clustering
+hdbscan>=0.8.29
+
+# Configuration
+pyyaml>=6.0
+
+# LLM (optional)
+openai>=1.0.0
+
+# PDF Generation (existing)
+reportlab>=4.0.0
